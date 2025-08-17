@@ -108,13 +108,13 @@ import os
 
 def build_and_train_qnn(
     X_train, y_train,
-    n_qubits=3, reps=1, maxiter=100, seed=42,
+    n_qubits=4, reps=3, maxiter=100, seed=42,
     save_path="qnn_model.pkl"
 ):
     rng = np.random.default_rng(seed)
 
     # Use a tiny subset of the data for speed
-    subset_size = 300
+    subset_size = 1000
     X_train_sub = X_train[:subset_size]
     y_train_sub = y_train[:subset_size]
 

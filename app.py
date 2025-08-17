@@ -67,8 +67,8 @@ if os.path.exists(QNN_MODEL_PATH):
 else:
 
     qnn_pipeline = build_and_train_qnn(
-        X_train[:500], y_train[:500],
-        reps=3, maxiter=10,
+        X_train[:1000], y_train[:1000],
+        reps=3, maxiter=100,
     )
 
 y_pred_qnn_rescaled = qnn_predict(qnn_pipeline, X_test)
