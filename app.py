@@ -44,30 +44,34 @@ from classical import build_and_train, load_classical
 from quantum import build_and_train_qnn, qnn_predict, load_qnn_pipeline
 from evaluations import evaluate
 from visualisations import plot_predictions
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 
 # =============================
 # Load data
 # =============================
-X_train, X_test, y_train, y_test, y_scaler = load_and_preprocess()
+X_train, X_test, y_train, y_test= load_and_preprocess()
 
 
 # =============================
 # Quantum Model (train or load)
 # =============================
-# QNN_MODEL_PATH = "qnn_model.pkl"
+QNN_MODEL_PATH = "qnn_model.pkl"
 
-# if os.path.exists(QNN_MODEL_PATH):
-#     # Forcing a rebuild for debugging purposes
-#     print("[INFO] Old QNN model exists. Deleting and retraining...")
-#     os.remove(QNN_MODEL_PATH)
-    
-# qnn_pipeline = build_and_train_qnn(
-#     X_train[:500], y_train[:500],
-#     reps=3, maxiter=10,
-# )
+if os.path.exists(QNN_MODEL_PATH):
+    # Forcing a rebuild for debugging purposes
+    # print("[INFO] Old QNN model exists. Deleting and retraining...")
+    # os.remove(QNN_MODEL_PATH)
+    qnn_pipeline = load_qnn_pipeline()
 
-# y_pred_qnn_rescaled = qnn_predict(qnn_pipeline, X_test)
+else:
+
+    qnn_pipeline = build_and_train_qnn(
+        X_train[:500], y_train[:500],
+        reps=3, maxiter=10,
+    )
+
+y_pred_qnn_rescaled = qnn_predict(qnn_pipeline, X_test)
 
 
 # =============================
@@ -76,16 +80,20 @@ X_train, X_test, y_train, y_test, y_scaler = load_and_preprocess()
 CLS_MODEL_PATH = "cls_model.pkl"
 
 from classical import build_and_train, load_classical
+y_scaler = MinMaxScaler((0, 1))
+y_scaler.fit(y_train)
+
+# Scale y_train for training
+y_train_scaled = y_scaler.transform(y_train)
 
 if os.path.exists("cls_model.keras") and os.path.exists("cls_model.pkl"):
     cls_model, history, time_cls = load_classical()
 else:
-    cls_model, history, time_cls = build_and_train(X_train, y_train, save_path="cls_model.pkl")
-
+    cls_model, history, time_cls = build_and_train(X_train, y_train_scaled, save_path="cls_model.pkl")
 
 y_pred_cls = cls_model.predict(X_test)
 y_pred_cls_rescaled = y_scaler.inverse_transform(y_pred_cls)
-y_test_rescaled = y_scaler.inverse_transform(y_test)
+y_test_rescaled = y_test
 
 
 # =============================

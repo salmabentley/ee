@@ -108,27 +108,35 @@ import os
 
 def build_and_train_qnn(
     X_train, y_train,
-    n_qubits=3, reps=1, maxiter=10, seed=42,
+    n_qubits=3, reps=1, maxiter=100, seed=42,
     save_path="qnn_model.pkl"
 ):
     rng = np.random.default_rng(seed)
 
     # Use a tiny subset of the data for speed
-    subset_size = 50
+    subset_size = 300
     X_train_sub = X_train[:subset_size]
     y_train_sub = y_train[:subset_size]
 
-    # 1. Initialize and fit the target scaler
+    # 1. Fit the scaler on the FULL training set!
     y_scaler_qnn = MinMaxScaler(feature_range=(-1, 1))
-    y_scaled = y_scaler_qnn.fit_transform(y_train_sub.reshape(-1, 1)).ravel()
+    y_scaler_qnn.fit(y_train.reshape(-1, 1))  # <-- Fit on all y_train
 
-    # 2. Reduce dimensions using PCA
+    # 2. Transform the subset for training
+    y_scaled = y_scaler_qnn.transform(y_train_sub.reshape(-1, 1)).ravel()
+
+    print("y_train min/max:", y_train.min(), y_train.max())
+    print("y_train_sub min/max:", y_train_sub.min(), y_train_sub.max())
+    print("y_scaled (train subset) min/max:", y_scaled.min(), y_scaled.max())
+
+    # 3. Fit PCA and x_scaler on full training set
     pca = PCA(n_components=n_qubits, random_state=seed)
-    X_low = pca.fit_transform(X_train_sub)
+    pca.fit(X_train)
+    X_low = pca.transform(X_train_sub)
 
-    # 3. Scale inputs to angle range [0, 2pi]
     x_scaler = MinMaxScaler(feature_range=(0, 2 * np.pi))
-    X_embed = x_scaler.fit_transform(X_low)
+    x_scaler.fit(pca.transform(X_train))
+    X_embed = x_scaler.transform(X_low)
 
     # 4. Quantum circuit
     feature_map = ZZFeatureMap(feature_dimension=n_qubits, reps=1)
@@ -137,11 +145,13 @@ def build_and_train_qnn(
 
     # 5. Estimator + QNN
     estimator = Estimator()
+    gradient = ParamShiftEstimatorGradient(estimator)
     qnn = EstimatorQNN(
         circuit=circuit,
         input_params=feature_map.parameters,
         weight_params=ansatz.parameters,
-        estimator=estimator
+        estimator=estimator,
+        gradient=gradient
     )
 
     # 6. Optimizer and Regressor
@@ -174,6 +184,9 @@ def qnn_predict(pipeline, X):
     X_low = pipeline["pca"].transform(X)
     X_embed = pipeline["x_scaler"].transform(X_low)
     y_scaled = pipeline["model"].predict(X_embed).reshape(-1, 1)
+    print("QNN prediction (scaled) min/max:", y_scaled.min(), y_scaled.max())
+    y_pred = pipeline["y_scaler_qnn"].inverse_transform(y_scaled).ravel()
+    print("QNN prediction (rescaled) min/max:", y_pred.min(), y_pred.max())
     return pipeline["y_scaler_qnn"].inverse_transform(y_scaled).ravel()
 
 def load_qnn_pipeline(path="qnn_model.pkl"):
