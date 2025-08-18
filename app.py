@@ -67,11 +67,12 @@ if os.path.exists(QNN_MODEL_PATH):
 else:
 
     qnn_pipeline = build_and_train_qnn(
-        X_train[:1000], y_train[:1000],
-        reps=3, maxiter=100,
+        X_train[:1000], y_train[:1000]
     )
 
 y_pred_qnn_rescaled = qnn_predict(qnn_pipeline, X_test)
+
+print("QNN predictions (first 10):", y_pred_qnn_rescaled[:10])
 
 
 # =============================
@@ -94,6 +95,7 @@ else:
 y_pred_cls = cls_model.predict(X_test)
 y_pred_cls_rescaled = y_scaler.inverse_transform(y_pred_cls)
 y_test_rescaled = y_test
+print("True values (first 10):", y_test_rescaled[:10])
 
 
 # =============================

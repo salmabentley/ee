@@ -102,34 +102,30 @@ from qiskit.primitives import Estimator
 from qiskit_machine_learning.neural_networks import EstimatorQNN
 from qiskit_machine_learning.gradients.param_shift.param_shift_estimator_gradient import ParamShiftEstimatorGradient
 from qiskit_machine_learning.algorithms.regressors import NeuralNetworkRegressor
-from qiskit_algorithms.optimizers import SPSA # Use a Qiskit-native optimizer
+from qiskit_algorithms.optimizers import L_BFGS_B # Use a Qiskit-native optimizer
 import joblib
 import os
+from qiskit import QuantumCircuit
+from qiskit.circuit import ParameterVector
 
 def build_and_train_qnn(
     X_train, y_train,
-    n_qubits=4, reps=3, maxiter=100, seed=42,
-    save_path="qnn_model.pkl"
+    n_qubits=4,
+    reps=2,
+    maxiter=50, # Increased maxiter
+    seed=42,
+    save_path="qnn_model.pkl", # New model file
 ):
     rng = np.random.default_rng(seed)
 
-    # Use a tiny subset of the data for speed
-    subset_size = 1000
+    subset_size = 250
     X_train_sub = X_train[:subset_size]
     y_train_sub = y_train[:subset_size]
 
-    # 1. Fit the scaler on the FULL training set!
     y_scaler_qnn = MinMaxScaler(feature_range=(-1, 1))
-    y_scaler_qnn.fit(y_train.reshape(-1, 1))  # <-- Fit on all y_train
-
-    # 2. Transform the subset for training
+    y_scaler_qnn.fit(y_train.reshape(-1, 1))
     y_scaled = y_scaler_qnn.transform(y_train_sub.reshape(-1, 1)).ravel()
 
-    print("y_train min/max:", y_train.min(), y_train.max())
-    print("y_train_sub min/max:", y_train_sub.min(), y_train_sub.max())
-    print("y_scaled (train subset) min/max:", y_scaled.min(), y_scaled.max())
-
-    # 3. Fit PCA and x_scaler on full training set
     pca = PCA(n_components=n_qubits, random_state=seed)
     pca.fit(X_train)
     X_low = pca.transform(X_train_sub)
@@ -138,25 +134,43 @@ def build_and_train_qnn(
     x_scaler.fit(pca.transform(X_train))
     X_embed = x_scaler.transform(X_low)
 
-    # 4. Quantum circuit
-    feature_map = ZZFeatureMap(feature_dimension=n_qubits, reps=1)
-    ansatz = TwoLocal(n_qubits, ["ry", "rz"], entanglement="linear", reps=reps)
+    params = ParameterVector("θ", length=2*n_qubits)
+
+    qc = QuantumCircuit(n_qubits)
+
+    for i in range(n_qubits):
+
+        qc.ry(params[i], i)
+
+        qc.cx(0,1); qc.cx(0,2); qc.cx(1,3); qc.cx(2,3)
+
+    for i in range(n_qubits):
+
+        qc.ry(params[n_qubits+i], i)
+
+    ansatz = qc.remove_final_measurements(inplace=False)
+
+
+
+    feature_map = ZZFeatureMap(feature_dimension=n_qubits, reps=reps)
+
     circuit = feature_map.compose(ansatz, inplace=False)
 
-    # 5. Estimator + QNN
     estimator = Estimator()
-    gradient = ParamShiftEstimatorGradient(estimator)
+    # gradient = ParamShiftEstimatorGradient(estimator)
     qnn = EstimatorQNN(
         circuit=circuit,
         input_params=feature_map.parameters,
         weight_params=ansatz.parameters,
         estimator=estimator,
-        gradient=gradient
+        # gradient=gradient
     )
 
-    # 6. Optimizer and Regressor
-    optimizer = SPSA(maxiter=maxiter)
     initial_point = rng.normal(0, 0.1, size=qnn.num_weights)
+    
+    # NEW: Use COBYLA
+    optimizer = L_BFGS_B(maxiter=maxiter)
+
     regressor = NeuralNetworkRegressor(
         neural_network=qnn,
         optimizer=optimizer,
@@ -165,7 +179,6 @@ def build_and_train_qnn(
     )
     regressor.fit(X_embed, y_scaled)
 
-    # 7. Store the full pipeline including PCA
     pipeline = {
         "model": regressor,
         "pca": pca,
