@@ -111,14 +111,14 @@ from qiskit.circuit import ParameterVector
 def build_and_train_qnn(
     X_train, y_train,
     n_qubits=4,
-    reps=4,
-    maxiter=200, # Increased maxiter
+    reps=2,
+    maxiter=100, # Increased maxiter
     seed=42,
     save_path="qnn_model.pkl", # New model file
 ):
     rng = np.random.default_rng(seed)
 
-    subset_size = 1000
+    subset_size = 300
     X_train_sub = X_train[:subset_size]
     y_train_sub = y_train[:subset_size]
 
